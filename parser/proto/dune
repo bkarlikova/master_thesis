@@ -1,0 +1,10 @@
+(library
+ (name onnx_proto)
+ (public_name parser.proto)
+ (libraries ocaml-protoc-plugin))
+
+(rule
+ (targets onnx.ml)
+ (deps onnx.proto)
+ (action
+  (run protoc -I . --ocaml_out=. onnx.proto)))

@@ -1,0 +1,14 @@
+(lang dune 3.8)
+(generate_opam_files true)
+
+(maintainers "Barbora Karlikova <barbora.karlik@gmail.com>")
+(authors "Barbora Karlikova <barbora.karlik@gmail.com>")
+
+(package
+ (name parser)
+ (synopsis "A prototype ONNX model parser in OCaml")
+ (depends
+  (ocaml (>= 4.14))
+  (dune (>= 3.8))
+  (ocaml-protoc-plugin (>= 6.2.0))
+  conf-protoc))
