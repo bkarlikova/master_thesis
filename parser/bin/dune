@@ -1,4 +1,11 @@
 (executable
  (name main)
  (public_name onnx-dump)
+ (modules main)
  (libraries parser.proto ocaml-protoc-plugin))
+
+(executable
+ (name onnx2wasm)
+ (public_name onnx2wasm)
+ (modules onnx2wasm)
+ (libraries parser.onnx2wasm))

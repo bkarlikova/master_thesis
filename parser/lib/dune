@@ -1,0 +1,4 @@
+(library
+ (name onnx2wasm)
+ (public_name parser.onnx2wasm)
+ (libraries parser.proto ocaml-protoc-plugin))
