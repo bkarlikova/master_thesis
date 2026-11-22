@@ -27,6 +27,7 @@ def run_wasm(wasm_path: Path, inputs: list[np.ndarray]) -> list[np.ndarray]:
         input=payload,
         capture_output=True,
         text=True,
+        check=False,
     )
     if result.returncode != 0:
         sys.exit(f"WASM runner failed:\n{result.stderr.strip()}")
