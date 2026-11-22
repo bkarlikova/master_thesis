@@ -26,7 +26,19 @@ technical notes, open technical questions and the work log belong here.
 cd parser && dune build
 cd parser && dune exec onnx-dump -- ../models/outputs/feedforward.onnx
 cd models && uv run python tmp_model.py
+cd parser && dune test
+cd parser && dune exec onnx2wasm -- ../models/outputs/feedforward.onnx ../build/feedforward.wasm [batch]
+cd models && uv run python compare.py outputs/feedforward.onnx ../build/feedforward.wasm [--batch N]
+cd models && uv run python iris.py          # trains Iris classifier → outputs/iris.onnx, iris_test.json
+node runtime/iris_demo.mjs build/iris.wasm models/outputs/iris_test.json
 ```
+
+## Compiler pipeline (`parser/lib/`)
+
+`loader.ml` (ONNX → `Ir.graph`, static shapes, external weights) → `memory_plan.ml` (byte offset per
+tensor, no reuse) → `codegen.ml` (one exported `run`, loops over linear memory) → `wasm.ml` (own
+binary encoder). The module exports `memory`, `run`, and i32 globals `input_offset`, `input_length`,
+`output_offset`, `output_length`. `runtime/run.mjs` runs it; `models/compare.py` checks against ORT.
 
 ## Technical decisions
 
@@ -37,12 +49,10 @@ cd models && uv run python tmp_model.py
 
 ## Open technical questions
 
-- WASM emission: the `wasm` opam package (WebAssembly reference interpreter, has an AST + binary
-  encoder + validator) vs. our own small binary encoder (~300 lines). Adding a dependency needs the
-  user's approval.
-- External weights: models use `.onnx.data` (external data). The parser must load it.
-- Feedforward exports `Gemm` (with `transB=1`), not MatMul+Add. Support both.
-- Batch dimension is symbolic (`batch_size`). Decide: fix at compile time, or loop over batch at runtime.
+- Decided for the "MVP of MVP" (user: as simple as possible): own encoder, batch fixed at compile
+  time, one memory region per tensor. Next: MatMul, Add, Sigmoid/Tanh/Softmax (needs own `exp`),
+  memory reuse later (proof #4).
+- Gemm only supports a bias of shape [N]; general broadcasting is not implemented.
 - SIMD128: available in all major browsers; use for matmul after the scalar version works.
   Threads need SharedArrayBuffer + cross-origin isolation, so skip them.
 - onnx2c + Emscripten as a baseline: waiting for the user's decision.
@@ -57,3 +67,6 @@ cd models && uv run python tmp_model.py
 - 2026-11-21: Reviewed annotation and existing code. `dune build` and `onnx-dump` work on
   `feedforward.onnx`. Set up `PROGRESS.md` and this file. User's answers: report = start of the thesis,
   reframing OK, OCaml stays, AI use goes in the university's signed declaration.
+- 2026-11-21: Repo moved from `~/FEL/DIP`. First end-to-end run on branch `feature/wasm-codegen-mvp`:
+  feedforward.onnx → 3846-byte .wasm, max diff vs ORT 1.8e-7 over 100 inputs (batch 1 and 4).
+  The user wants to learn the concepts along the way: explain alternatives, not just code.
