@@ -17,19 +17,23 @@ technical notes, open technical questions and the work log belong here.
 
 - `parser/`: OCaml (dune). ONNX protobuf bindings generated from `proto/onnx.proto` via
   ocaml-protoc-plugin; `bin/main.ml` is an inspection tool (`onnx-dump`).
-- `models/`: Python (uv). `tmp_model.py` exports test models (feedforward, RNN, GRU) to
-  `models/outputs/` as `.onnx` + external `.onnx.data` + text dumps.
+- `models/`: Python (uv). `architectures.py` defines the networks. `save_model.py` converts `.pt`
+  state_dicts to single-file ONNX and holds the shared export code. `make_test_models.py` exports
+  untrained feedforward/RNN/GRU to `models/outputs/` as `.onnx` + external `.onnx.data` + text dumps.
+  The committed test models predate its seed: don't regenerate them without asking the user.
 
 ## Commands
 
 ```sh
 cd parser && dune build
 cd parser && dune exec onnx-dump -- ../models/outputs/feedforward.onnx
-cd models && uv run python tmp_model.py
+cd models && uv run python make_test_models.py   # overwrites the committed test models
+cd models && uv run python save_model.py model.pt model.onnx --architecture feedforward
+cd models && uv run python -m unittest           # Python tests
 cd parser && dune test
 cd parser && dune exec onnx2wasm -- ../models/outputs/feedforward.onnx ../build/feedforward.wasm [batch]
 cd models && uv run python compare.py outputs/feedforward.onnx ../build/feedforward.wasm [--batch N]
-cd models && uv run python iris.py          # trains Iris classifier → outputs/iris.onnx, iris_test.json
+cd models && uv run python iris.py          # trains Iris → outputs/iris.pt → iris.onnx, plus iris_test.json
 node runtime/iris_demo.mjs build/iris.wasm models/outputs/iris_test.json
 ```
 
@@ -57,10 +61,6 @@ binary encoder). The module exports `memory`, `run`, and i32 globals `input_offs
   Threads need SharedArrayBuffer + cross-origin isolation, so skip them.
 - onnx2c + Emscripten as a baseline: waiting for the user's decision.
 - ONNX-MLIR → WASM build is slow and fragile; time-box it, not before February.
-
-## Housekeeping
-
-- `parser/_build/` is committed to git; add it to `.gitignore` and remove it from the index (ask first).
 
 ## Log
 
