@@ -1,9 +1,9 @@
 # CLAUDE.md
 
 Master thesis project: compile ONNX neural network models into standalone, model-specialized
-WebAssembly modules. The official assignment is in `project_annotation.pdf`.
-The user's milestones, plan and scope are in `PROGRESS.md`. Keep that file limited to those topics;
-technical notes, open technical questions and the work log belong here.
+WebAssembly modules. The official assignment is in `project_annotation.pdf` (requirements R1–R5).
+`PROGRESS.md` is the user's week-by-week plan to 17 Jan 2027: tasks, checks and reading per week,
+tagged R1–R5. Keep it a plan; technical notes, open technical questions and the work log belong here.
 
 ## Roles (agreed with the supervisor)
 
@@ -21,6 +21,9 @@ technical notes, open technical questions and the work log belong here.
   state_dicts to single-file ONNX and holds the shared export code. `make_test_models.py` exports
   untrained feedforward/RNN/GRU to `models/outputs/` as `.onnx` + external `.onnx.data` + text dumps.
   The committed test models predate its seed: don't regenerate them without asking the user.
+  `iris.py` trains the Iris classifier. `compare.py` checks a `.wasm` against native ORT.
+- `runtime/`: Node scripts. `run.mjs` runs a module (JSON on stdin/stdout); `iris_demo.mjs`
+  checks predicted classes on the 30 Iris test flowers.
 
 ## Commands
 
@@ -42,25 +45,38 @@ node runtime/iris_demo.mjs build/iris.wasm models/outputs/iris_test.json
 `loader.ml` (ONNX → `Ir.graph`, static shapes, external weights) → `memory_plan.ml` (byte offset per
 tensor, no reuse) → `codegen.ml` (one exported `run`, loops over linear memory) → `wasm.ml` (own
 binary encoder). The module exports `memory`, `run`, and i32 globals `input_offset`, `input_length`,
-`output_offset`, `output_length`. `runtime/run.mjs` runs it; `models/compare.py` checks against ORT.
+`output_offset`, `output_length`. It imports nothing. `runtime/run.mjs` runs it.
+
+`compare.py`: 100 standard-normal inputs (seed 0), compares only the final output with native ORT
+(`atol = rtol = 1e-5`, not yet justified). It does not see intermediate tensors.
 
 ## Technical decisions
 
 - Language: OCaml for the compiler (user's choice, confirmed). Python for ONNX Runtime reference
   and model generation; JavaScript for running modules in Node/browser.
-- Emit WASM directly, with no C/LLVM toolchain in the pipeline.
+- Emit WASM directly, with no C/LLVM toolchain in the pipeline. Only compiler dependency:
+  ocaml-protoc-plugin (+ `protoc`) for decoding ONNX.
 - MVP: static shapes, batch size fixed at compile time, weights embedded in the module.
+- Correctness is shown by testing (native ORT, float64 reference, per-operator and random-network
+  tests), not formal proof: the annotation doesn't require proofs. The user writes short informal
+  arguments only (Softmax no overflow, WASM float determinism, disjoint memory regions).
+- No relaxed SIMD (results differ across hardware). If SIMD128 is added for matmul, vectorize
+  across output columns so results stay bit-identical to the scalar code.
+- Threads need SharedArrayBuffer + cross-origin isolation: skip them.
 
 ## Open technical questions
 
-- Decided for the "MVP of MVP" (user: as simple as possible): own encoder, batch fixed at compile
-  time, one memory region per tensor. Next: MatMul, Add, Sigmoid/Tanh/Softmax (needs own `exp`),
-  memory reuse later (proof #4).
 - Gemm only supports a bias of shape [N]; general broadcasting is not implemented.
-- SIMD128: available in all major browsers; use for matmul after the scalar version works.
-  Threads need SharedArrayBuffer + cross-origin isolation, so skip them.
-- onnx2c + Emscripten as a baseline: waiting for the user's decision.
-- ONNX-MLIR → WASM build is slow and fragile; time-box it, not before February.
+- Known loader bugs (fix with tests in week 1): batch 0 overwrites weights; negative or non-numeric
+  batch crashes; int32/double inputs read as float32; custom-domain `Relu` accepted; every symbolic
+  dimension becomes the batch; external-data path can point outside the model's folder; missing or
+  short weight files raise raw exceptions; RNN/GRU fail with a misleading float32 message.
+- Committed `rnn.onnx`/`gru.onnx` still have batch 1 baked into the output shape until regenerated
+  (needs the user's OK).
+- User decides in week 1: onnx2c + Emscripten as a baseline; browsers (proposed: Chrome, Firefox, Safari).
+- ONNX-MLIR → WASM build is slow and fragile: time-boxed to 2 days in week 3; record why if it fails.
+- SIMD for matmul: proposed as optional in week 5, not yet confirmed by the user.
+- New dependencies need the user's OK first: onnxruntime-web, Emscripten, onnx2c, ONNX-MLIR, plotting.
 
 ## Log
 
@@ -70,3 +86,9 @@ binary encoder). The module exports `memory`, `run`, and i32 globals `input_offs
 - 2026-11-21: Repo moved from `~/FEL/DIP`. First end-to-end run on branch `feature/wasm-codegen-mvp`:
   feedforward.onnx → 3846-byte .wasm, max diff vs ORT 1.8e-7 over 100 inputs (batch 1 and 4).
   The user wants to learn the concepts along the way: explain alternatives, not just code.
+- 2026-11-22: Iris trained and compiled: 1027-byte .wasm, max diff 1.91e-6, 30/30 test flowers.
+  Model scripts committed (`save_model.py`, `iris.py`, `make_test_models.py`); export-warning
+  suppression removed as overbuilt (user prefers the simplest fix). `PROGRESS.md` rewritten as a
+  week-by-week plan covering all of R1–R5 by 17 Jan, with checks and a reading list per week;
+  proofs made optional. Supervisor meeting 23 Nov: ask about the framing around research
+  questions and whether a formal proof is expected.
