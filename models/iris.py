@@ -1,21 +1,27 @@
-"""Train a small classifier on the Iris dataset and export it to ONNX.
+"""Train a small classifier on the Iris dataset, save it and convert it to ONNX.
 
 Iris: 150 flowers, 4 measurements each (sepal length/width, petal length/width
 in cm), 3 species. Data from the UCI Machine Learning Repository (CC BY 4.0):
 https://archive.ics.uci.edu/dataset/53/iris
 
-Writes outputs/iris.onnx and outputs/iris_test.json (the held-out flowers,
-used by runtime/iris_demo.mjs to demonstrate inference in WASM).
+Usage: uv run python iris.py
+
+Writes to outputs/:
+  iris.pt         the trained weights
+  iris.onnx       converted from iris.pt by save_model.py
+  iris.txt        readable dump of the ONNX graph
+  iris_test.json  the held-out flowers, used by runtime/iris_demo.mjs
 """
 
 import csv
 import json
-import os
+from pathlib import Path
 
 import torch
-import torch.nn as nn
+from torch import nn
 
-from tmp_model import FeedForwardNN, export_and_save
+from architectures import FeedForwardNN
+from save_model import convert, write_text_dump
 
 SPECIES = ["Iris-setosa", "Iris-versicolor", "Iris-virginica"]
 TEST_SIZE = 30
@@ -37,7 +43,7 @@ def accuracy(model: nn.Module, features: torch.Tensor, labels: torch.Tensor) -> 
     return (predictions == labels).float().mean().item()
 
 
-def main() -> None:
+def main(output_dir: Path = Path("outputs")) -> None:
     torch.manual_seed(0)
     features, labels = load_iris("data/iris.csv")
 
@@ -65,16 +71,22 @@ def main() -> None:
 
     print(f"test accuracy {accuracy(model, test_x, test_y):.0%} on {TEST_SIZE} unseen flowers")
 
-    os.makedirs("outputs", exist_ok=True)
-    export_and_save(
-        model,
-        test_x[:1],
-        "outputs/iris.onnx",
-        "outputs/iris.txt",
+    output_dir.mkdir(parents=True, exist_ok=True)
+    weights_path = output_dir / "iris.pt"
+    onnx_path = output_dir / "iris.onnx"
+    torch.save(model.state_dict(), weights_path)
+
+    # Convert from the file, not from `model`, as with any model trained earlier.
+    restored_model = convert(
+        weights_path,
+        onnx_path,
+        "feedforward",
         input_name="measurements",
         output_name="scores",
     )
-    with open("outputs/iris_test.json", "w") as f:
+    write_text_dump(restored_model, onnx_path)
+
+    with open(output_dir / "iris_test.json", "w") as f:
         json.dump(
             {
                 "species": SPECIES,
@@ -83,7 +95,7 @@ def main() -> None:
             },
             f,
         )
-    print("wrote outputs/iris.onnx and outputs/iris_test.json")
+    print(f"Wrote {weights_path}, {onnx_path} and the test flowers")
 
 
 if __name__ == "__main__":
