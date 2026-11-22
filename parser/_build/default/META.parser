@@ -1,9 +1,0 @@
-package "proto" (
-  directory = "proto"
-  description = ""
-  requires = "ocaml-protoc-plugin"
-  archive(byte) = "onnx_proto.cma"
-  archive(native) = "onnx_proto.cmxa"
-  plugin(byte) = "onnx_proto.cma"
-  plugin(native) = "onnx_proto.cmxs"
-)
